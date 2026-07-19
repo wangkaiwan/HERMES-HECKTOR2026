@@ -1,0 +1,68 @@
+# Phase-1 retrain (#24) — independent 5-fold seg-only retrain, FRESH from the
+# VoCo-B pretrained encoder (no warm-start), on the corrected (160,160,192)
+# cache. Three new ingredients vs the original Phase-1 train:
+#   1. Dice + CE + Focal seg loss   (focal_weight 1.0, was 0)
+#   2. hard-case oversampling       (196 bottom-quartile per-patient-dice patients)
+#   3. low-res-simulation aug       (already auto-active in data/transforms.py)
+# Inherits default.yaml + seg_only.yaml; overrides only.
+#
+# Launch (FRESH — no --init, no --resume on first start):
+#   python scripts/train_seg.py --config configs/seg_retrain.yaml \
+#       --fold N --gpu G \
+#       --cache_dir /home/kaiwang/project/HECKTOR_2026_cache_160x192 \
+#       --save_dir checkpoints/seg_fold{N}_retrain
+# Crash recovery: re-run with --resume auto (restores optimizer/epoch/patience).
+
+defaults:
+  - default
+  - seg_only
+
+data:
+  # Hard-case oversampling — the 196 bottom-quartile-dice patients from the
+  # 5-fold ft QA (evaluation/results/hard_cases_bottom25.csv, 2026-05-17).
+  # build_dataloaders intersects this global list with each fold's train split.
+  hard_case_oversampling:
+    enabled: true
+    weight: 3.0
+    patient_ids: [CHUM-007, CHUM-010, CHUM-013, CHUM-014, CHUM-015, CHUM-018,
+      CHUM-026, CHUM-036, CHUM-038, CHUM-040, CHUM-043, CHUM-046, CHUM-047,
+      CHUM-054, CHUM-058, CHUM-065, CHUP-000, CHUP-003, CHUP-008, CHUP-014,
+      CHUP-018, CHUP-023, CHUP-027, CHUP-029, CHUP-030, CHUP-045, CHUP-048,
+      CHUP-052, CHUP-054, CHUP-062, CHUP-064, CHUP-073, CHUP-075, CHUS-005,
+      CHUS-021, CHUS-026, CHUS-028, CHUS-030, CHUS-036, CHUS-050, CHUS-051,
+      CHUS-058, CHUS-061, CHUS-064, CHUS-074, CHUS-096, CHUV-001, CHUV-002,
+      CHUV-003, CHUV-004, CHUV-007, CHUV-010, CHUV-019, CHUV-023, CHUV-027,
+      CHUV-036, CHUV-041, CHUV-046, CHUV-050, CHUV-051, HGJ-052, HGJ-067,
+      HGJ-089, HGJ-090, HMR-012, HMR-013, HMR-014, HMR-020, HMR-023, HMR-030,
+      MDA-011, MDA-022, MDA-023, MDA-026, MDA-029, MDA-031, MDA-034, MDA-039,
+      MDA-040, MDA-041, MDA-047, MDA-050, MDA-056, MDA-066, MDA-070, MDA-078,
+      MDA-081, MDA-091, MDA-108, MDA-114, MDA-119, MDA-120, MDA-121, MDA-123,
+      MDA-124, MDA-126, MDA-127, MDA-128, MDA-135, MDA-144, MDA-148, MDA-150,
+      MDA-164, MDA-166, MDA-169, MDA-174, MDA-175, MDA-178, MDA-180, MDA-191,
+      MDA-192, MDA-199, MDA-200, MDA-201, MDA-202, MDA-203, MDA-212, MDA-222,
+      MDA-223, MDA-224, MDA-225, MDA-226, MDA-229, MDA-231, MDA-234, MDA-236,
+      MDA-237, MDA-245, MDA-248, MDA-250, MDA-251, MDA-253, MDA-256, MDA-257,
+      MDA-261, MDA-262, MDA-264, MDA-266, MDA-268, MDA-270, MDA-272, MDA-274,
+      MDA-277, MDA-282, MDA-289, MDA-295, MDA-296, MDA-297, MDA-298, MDA-304,
+      MDA-306, MDA-308, MDA-309, MDA-311, MDA-314, MDA-317, MDA-323, MDA-325,
+      MDA-331, MDA-339, MDA-345, MDA-346, MDA-351, MDA-352, MDA-362, MDA-363,
+      MDA-373, MDA-374, MDA-375, MDA-376, MDA-377, MDA-379, MDA-381, MDA-382,
+      MDA-383, MDA-388, MDA-390, MDA-391, MDA-392, MDA-402, MDA-403, MDA-404,
+      MDA-409, MDA-410, MDA-420, MDA-425, MDA-427, MDA-429, MDA-430, MDA-435,
+      MDA-437, MDA-439, MDA-441, MDA-445, USZ-003, USZ-008]
+
+training:
+  # wandb run name → "seg_retrain_fold{N}" — distinct from the original
+  # Phase-1 / ft runs (which were all named "seg_fold{N}" and collided).
+  run_name: seg_retrain
+  # Fresh-train peak LR (NOT the 2e-5 gentle continue) — this is a real retrain.
+  lr: 1.0e-4
+  lr_min: 1.0e-8
+  warmup_epochs: 5
+  max_epochs: 300                                    # ceiling; EarlyStopping (patience=25) fires earlier
+  seg_loss:
+    dice_weight: 1.0
+    ce_weight: 1.0
+    focal_weight: 1.0                                # Focal added ON TOP of Dice+CE (was 0.0 = off)
+    focal_alpha: 0.25
+    focal_gamma: 2.0

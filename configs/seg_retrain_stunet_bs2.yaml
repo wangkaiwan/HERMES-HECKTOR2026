@@ -1,0 +1,21 @@
+# STU-Net Small fold0 — batch_size=2 A/B variant (task #18).
+# Inherits the full stunet config (full-canvas + DS + warmup + plateau + focal +
+# oversample + low-res-sim, random init). Only batch_size changes.
+#
+# Purpose: A/B compare against the running bs1 fold0 to see if reduced
+# gradient noise actually buys anything on STU-Net Small at full canvas.
+#
+# Launch (GPU1 once V3 fold2 frees it):
+#   bash scripts/shells/retrain_chain_stunet_bs2.sh 1 0
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet                # inherit backbone + full-canvas + DS
+
+training:
+  batch_size: 2                       # ← the only change vs seg_retrain_stunet
+  run_name: seg_retrain_stunet_bs2    # distinct wandb run name

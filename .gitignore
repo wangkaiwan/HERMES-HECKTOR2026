@@ -1,0 +1,9 @@
+*.ckpt
+*.pt
+*.joblib
+*.tar.gz
+__pycache__/
+*.pyc
+/data/raw/
+/checkpoints/
+venv/

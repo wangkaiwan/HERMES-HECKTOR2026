@@ -1,0 +1,28 @@
+# Phase 1 continue-train (fine-tune) config — kicks off from a previously
+# trained seg-only checkpoint with a SMALLER learning rate so the warm weights
+# adapt to the new (160,160,192) pipeline without catastrophic forgetting.
+#
+# Used for fold-0 continue-train (2026-05-13): the existing fold-0 ckpt was
+# trained with cache_volume=(200,200,200) under the whole-body crop bug;
+# continue-train at (160,160,192) gives the model proper exposure to CHUP/CHUV
+# head/neck patches that were silently cropped out before.
+#
+# Launch with:
+#   python scripts/train_seg.py --config configs/seg_only_continue.yaml \
+#       --fold 0 --gpu 1 \
+#       --init checkpoints/seg_fold0/epoch=057-val_dice_mean=0.0000.ckpt \
+#       --cache_dir /home/kaiwang/project/HECKTOR_2026_cache_160x192 \
+#       --save_dir checkpoints/seg_fold0_160x192_ft
+
+defaults:
+  - default        # ← `data:`, model defaults, etc.
+  - seg_only       # ← Phase-1 seg-only overrides (loss weights, monitor metric)
+
+training:
+  # 1/5 of fresh-train peak LR — typical fine-tune ratio. Keeps the warm
+  # encoder/decoder weights from drifting too far while letting head + last
+  # decoder stages adapt to the new spatial size distribution.
+  lr: 2.0e-5
+  lr_min: 1.0e-7                                   # proportional floor (was 1e-8 at 1e-4 LR)
+  warmup_epochs: 2                                 # short — weights already converged once
+  max_epochs: 200                                  # ceiling; EarlyStop (patience=25 = 50 epochs) will likely fire earlier

@@ -1,0 +1,187 @@
+seed: 42
+
+data:
+  raw_dir: data/raw                                 # symlink → /data/kwang/HECKTOR_2026_raw (HDD, 17 TB)
+  csv: data/raw/HECKTOR_2026_training_data.csv      # clinical + outcomes
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache  # PersistentDataset on NVMe SSD for training I/O speed (~70 GB est.)
+  manifest_dir: data/manifests                      # train_fold{i}.csv / val_fold{i}.csv
+  text_features_path: data/clinical_features.pt     # ClinicalBERT [CLS] per-patient
+  clinical_tabular_path: data/clinical_tabular.pt   # 16-d encoded tabular for Cox head
+
+  # Resampling / cropping
+  target_spacing: [2.0, 2.0, 2.0]                   # mm, isotropic
+  ct_clip_range: [-200, 200]                        # HU window
+  pt_clip_percentile: [0.5, 99.5]                   # SUV clamp percentiles
+  body_crop_margin: 16                              # voxels around tight body bbox
+  # Cached canvas after Spacing+CropForeground+KeepTopZd+ResizeWithPadOrCrop.
+  # Bumped 200³ → (160,160,192) on 2026-05-13: covers 100% of training GT bboxes
+  # (max 180/114/150 mm at 2mm), all dims /32 so SwinUNETR-clean (no DivisiblePad
+  # needed), VRAM 14.4 → 7.5 GB reserved. See evaluation/results/QA_FOLD0_DIAGNOSIS.md
+  # and evaluation/results/gt_bbox_coverage.csv.
+  cache_volume: [160, 160, 192]                     # post-cache canvas (XY×Z voxels)
+
+  # Modality robustness
+  pet_drop_prob: 0.1                                # train-time PET masking (HN_CU_Seg best)
+
+  # Sampling — for Phase 3 multitask retraining, roi_size = cache_volume so each
+  # epoch's patch is the full cached canvas (no random crop sampling).
+  roi_size: [160, 160, 192]                         # patch size = cache_volume
+  pos_neg_ratio: [3, 1]                             # foreground oversampling (kept for backward-compat; ignored when roi==cache)
+
+  num_workers: 4                                    # 2026-05-27 8→4: with 4 folds × 8 workers = 32 shm-fed workers, /dev/shm bursts triggered SIGBUS on fold2+fold4 simultaneously. 4 per fold = 16 total stays safe.
+
+  # Hard-case oversampling — give listed patients a higher per-epoch sampling
+  # probability. enabled=false (default) = plain uniform shuffle, no change.
+  # To activate: set enabled=true and fill patient_ids with the hard set
+  # (data-driven: after Phase-1 5-fold, rank by per-patient val dice, take the
+  # bottom quartile). `weight` is the sampling multiplier vs normal patients.
+  hard_case_oversampling:
+    enabled: false
+    weight: 3.0
+    patient_ids: []
+
+model:
+  name: VoCoSwinUNETR
+  # Seg backbone selector — values: voco (impl) | segresnet (#17) | stunet (#18).
+  # See models/encoder_factory.py. Default voco keeps current behavior; switching
+  # to segresnet or stunet auto-resizes the TN / Cox heads to the new bottleneck
+  # channel count (e.g., 256 for SegResNet default vs 768 for VoCo-B).
+  seg_backbone: voco
+  # Task #27 — deep supervision: returns aux seg logits at scales 1/2, 1/4, 1/8
+  # in training (DeepSupSwinUNETR). Adds ~+10-15% activation memory; off by
+  # default for backward compat. Activated in seg_retrain_v2.yaml.
+  deep_supervision: false
+  variant: B                                        # B / L / H from VoCo (B = 53M, fits the 25-min T4 budget more comfortably)
+  in_channels: 2                                    # CT + PT
+  out_seg_channels: 3                               # bg / GTVp / GTVn
+
+  swin_feature_size: 48                             # B variant: 48 (L would be 96)
+  swin_depths: [2, 2, 2, 2]
+  swin_num_heads: [3, 6, 12, 24]
+  swin_drop_path: 0.1
+  swin_attn_drop: 0.0
+  swin_use_checkpoint: true
+  pretrained_weights: third_party/voco_pretrained/VoComni_B.pt
+  pretrained_source: local                          # "local" or "hf"
+  hf_head: omni                                     # used only when pretrained_source: hf
+  hf_cache_dir: third_party/voco_pretrained         # huggingface_hub cache dir
+
+  # Text-conditioning (ClinicalBERT FiLM)
+  use_text_conditioning: true
+  text_dim: 768
+  text_dropout_prob: 0.3
+
+  # TN-staging head
+  staging:
+    hidden_dim: 256
+    # Task #36 (2026-05-13): challenge spec is T1-T4 only (4 classes). The 3
+    # T0 training patients (MDA-297/386/447) are excluded from staging
+    # supervision via has_staging=False in data/dataset.py:_encode_t.
+    n_t_classes: 4                                  # T1, T2, T3, T4
+    n_n_classes: 4                                  # N0, N1, N2 (incl. N2b/N2c), N3
+    pool: roi_masked                                # gather features inside predicted GTVp/GTVn
+
+  # Prognosis (Cox PH) head
+  prognosis:
+    # Method selector — values: cox (impl, Cox partial likelihood)
+    #                          | deepsurv (planned, deeper Cox MLP + dropout)
+    #                          | deephit  (planned, discrete-time NLL + ranking)
+    #                          | discrete (planned, piecewise-constant hazard).
+    # See models/prog_factory.py. Default cox keeps current behavior. Non-cox
+    # branches raise NotImplementedError today.
+    method: cox
+    hidden_dim: 256
+    use_clinical: true                              # concat tabular clinical features
+    n_clinical: 18                                  # see data/build_clinical_features.py — age, gender, HPV(3), tobacco(3), alcohol(3), PS(4), treatment(3); CenterID excluded
+
+training:
+  amp: true
+  batch_size: 1
+  max_epochs: 500
+  # patience is in val-checks, not epochs. With check_val_every_n_epoch=2,
+  # patience=25 = 50 epochs without monitor metric improvement → early stop.
+  # 2026-05-13: cut from 50 → 25 after observing fold-4 best @ep 195 then 90+
+  # idle epochs of no improvement (Phase 1 plateau is bounded; cheaper to stop
+  # earlier and rotate folds).
+  early_stop_patience: 25
+  check_val_every_n_epoch: 2
+  # 2026-06-17: after this epoch, validate EVERY epoch (cadence -> 1) for finer best-ckpt
+  # selection. Patience stays in val-checks (25), so the effective epoch-tolerance halves
+  # after the switch (25 ep instead of 50) — intended, to stop plateaued folds sooner.
+  # null/0 = disabled. Applies to runs launched after this change.
+  val_every1_after_epoch: 50
+  # 2026-06-16: min improvement to count as "better" — used by BOTH EarlyStopping
+  # (min_delta) and ReduceLROnPlateau (threshold, abs mode). 0.001 stops noise-level
+  # gains (e.g. 0.00014) from resetting patience / blocking LR drops, which silently
+  # extended plateaus ~20 epochs (fold0: ep95 0.68490 vs ep75 0.68476 → both "0.685").
+  min_delta: 0.001
+  monitor_metric: val/score                         # weighted composite
+
+  # Optimisation
+  lr: 1.0e-4
+  text_lr: 1.0e-3                                   # higher LR for text MLP only
+  lr_min: 1.0e-8
+  weight_decay: 1.0e-5
+  scheduler: cosine                                  # 'cosine' (default) | 'plateau' (#27 v2)
+  scheduler_plateau:                                 # used only when scheduler=plateau
+    factor: 0.5                                      # LR ×= factor on plateau
+    patience: 5                                      # val-checks of no improvement → drop LR
+    min_lr: 1.0e-7
+  warmup_epochs: 5
+
+  # Multitask loss weights — start fixed, then enable Kendall
+  uncertainty_weighting: true
+  loss_weights:                                     # used when uncertainty_weighting: false
+    seg: 1.0
+    staging: 0.5
+    prognosis: 0.5
+
+  # Sub-loss configs
+  seg_loss:
+    dice_weight: 1.0
+    ce_weight: 1.0
+    # Focal term added ON TOP of Dice+CE (SIMS-LIFE used Dice+Focal for hard
+    # tumor pixels). focal_weight=0.0 = OFF (current behavior). Set >0 (e.g. 1.0)
+    # to enable; alpha/gamma are the standard focal params (Lin et al.).
+    focal_weight: 0.0
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+    # Task #27 — deep supervision weights at scales [1, 1/2, 1/4, 1/8].  Normalised
+    # to sum=1 inside DeepSupervisionDiceCELoss → total loss magnitude matches
+    # single-scale. Only used when model.deep_supervision=true.
+    deep_sup_weights: [1.0, 0.5, 0.25, 0.125]
+  staging_loss:
+    class_weighted: true                            # inverse-freq for T/N stage imbalance
+  prognosis_loss:
+    type: cox_partial_likelihood
+
+  # Checkpointing / logging
+  save_dir: checkpoints
+  save_top_k: 1
+  log_every_n_steps: 20
+  wandb_project: hecktor2026
+  wandb_entity: null
+
+inference:
+  # Local (RTX 5090, 32 GB) — used during dev
+  sliding_window_size: [192, 192, 128]
+  sliding_window_overlap: 0.5
+  sw_batch_size: 2
+  tta: false
+  postprocess:
+    keep_largest_per_class: false                   # multi-lesion metric → keep all
+    min_lesion_voxels: 50                           # drop tiny FP components
+
+  # Submission-time (Grand Challenge T4, 16 GB VRAM, 10 GB container, 25 min budget)
+  # see docker/process.py for the constrained inference path
+  submission:
+    precision: fp16                                 # required to fit on T4
+    sliding_window_overlap: 0.25                    # tighter to stay under 25-min wall clock
+    sw_batch_size: 1
+    tta: false                                      # flip-TTA only if time budget allows
+    max_ensemble_members: 3                         # 5-fold trained → top-3 by val score
+    output:
+      seg_format: mha                               # [PatientID].mha at original CT spacing
+      seg_labels: [0, 1, 2]                         # 0=bg, 1=GTVp, 2=GTVn
+      staging_format: json                          # {"T_stage": "...", "N_stage": "..."}
+      prognosis_format: json                        # {"risk_score": float}

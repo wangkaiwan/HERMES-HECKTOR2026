@@ -1,0 +1,7 @@
+# Phase-2: full end-to-end multitask training.
+# Inherits from default.yaml; primary submission config.
+
+defaults:
+  - default
+
+# (uses default.yaml as-is; placeholder for future per-experiment overrides)

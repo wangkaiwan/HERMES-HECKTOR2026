@@ -1,0 +1,44 @@
+# --- Core DL ---
+torch>=2.4
+torchvision
+pytorch-lightning>=2.3
+
+# --- Medical imaging / models ---
+monai==1.4.0
+einops                  # required by monai.networks.nets.SwinUNETR (rearrange)
+nibabel
+SimpleITK
+scikit-image
+
+# --- Configuration / logging ---
+omegaconf
+hydra-core
+wandb
+tqdm
+rich
+
+# --- Tabular / metrics ---
+numpy
+pandas
+scikit-learn
+scipy
+lifelines              # Cox PH, c-index
+pycox                  # deep survival utilities
+torchsurv              # tensorized Cox losses
+
+# --- Text encoder for clinical features ---
+transformers>=4.40
+tokenizers
+sentencepiece
+
+# --- Pretrained weight loaders ---
+huggingface_hub>=0.24
+
+# --- Optional architectures ---
+nnunetv2               # baseline / sanity check
+mednext                # MedNeXt blocks (if pip-available; otherwise vendor under third_party)
+
+# --- Submission / utilities ---
+evalutils              # Grand Challenge container helpers
+click
+pyyaml

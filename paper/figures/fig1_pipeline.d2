@@ -1,0 +1,23 @@
+# More square 2-band layout with large fonts for legibility at column width.
+classes: {
+  box:  {style: {font-size: 44; stroke-width: 2}}
+  io:   {style: {font-size: 44; fill: "#eef2f7"; stroke-width: 2}}
+  seg:  {style: {font-size: 44; fill: "#dce6f2"; stroke-width: 2}}
+  stg:  {style: {font-size: 44; fill: "#e7eede"; stroke-width: 2}}
+  srv:  {style: {font-size: 44; fill: "#f2e6dc"; stroke-width: 2}}
+}
+
+inp:  {label: "CT + PET\n+ EHR"; class: io}
+prep: {label: "Preprocess\n(PET→CT, 1mm)"; class: io}
+seg:  {label: "10-fold STU-Net\nsegmentation"; class: seg}
+mask: {label: "Predicted mask\nGTVp / GTVn"; class: seg}
+
+stag: {label: "TN staging\ndeep + radiomics + geometry"; class: stg}
+surv: {label: "RFS ensemble\ndeep + concordance-loss + Cox"; class: srv}
+out:  {label: "mask · T/N · RFS risk"; class: io}
+
+inp -> prep -> seg -> mask
+mask -> stag -> out
+mask -> surv -> out
+inp -> stag
+inp -> surv

@@ -1,0 +1,29 @@
+# V4-bs1 fine-tune — continue from V4 best ckpt (ep103, borda 0.683 plateau)
+# with batch_size 4→1 to test whether smaller batch unlocks further gain.
+#
+# Hypothesis: V4 plateaued at borda 0.683 with batch=4 + LR decayed to 1.56e-6.
+# Switching to bs=1 (4× more optimizer steps per epoch) at fine-tune LR 1e-5
+# might escape the plateau.
+#
+# All other data pipeline settings inherited from V4 (1×1×2mm + abs SUV + full
+# canvas (192,192,160)). Pure batch-size A/B.
+#
+# Launch:
+#   bash scripts/shells/retrain_chain_stunet_v4_bs1.sh 0 0
+# Uses --init from checkpoints/seg_fold0_stunet_v4/epoch=103.ckpt (weights only,
+# fresh optimizer/scheduler — bs=4 momentum buffers don't trivially transfer to bs=1).
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+  - seg_retrain_stunet_v4                # inherit 1×1×2mm + abs SUV + (192,192,160) + early_stop=9999
+
+training:
+  batch_size: 1                          # ← V4-bs1 change
+  lr: 1.0e-5                             # ← fine-tune LR (10× lower than fresh; keep most of V4's converged state)
+  warmup_epochs: 2                       # ← short warmup (model already trained, not from scratch)
+  run_name: seg_retrain_stunet_v4_bs1    # distinct wandb run name

@@ -1,0 +1,22 @@
+# 10-fold STAGE-1 — from-scratch STU-Net, full patch (192×192×320), DEFAULT aug.
+# This IS the deployed base recipe (the one that gave seg_fold0_stunet=0.712), just on a
+# 10-fold split (data/manifests_10fold). save_top_k=3 keeps the top-3-ckpt ensemble mechanism
+# (→ 30 ckpts over 10 folds). Run with --fold 0..9 (ckpt dir auto = seg_fold{N}_10fold_s1,
+# wandb = 10fold_s1_fold{N}). Reuses the 1mm cache (same patients/preprocessing → no rebuild).
+# STAGE-2 (warm-start nnU-Net-aug fine-tune, lr 1e-5) is a separate config, run after if needed.
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+training:
+  run_name: 10fold_s1
+  save_top_k: 3                                     # keep top-3 ckpts per fold (deployed mechanism)
+data:
+  manifest_dir: data/manifests_10fold              # 10-fold split (5-fold manifests untouched)
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm
+  num_workers: 5                                    # for up to 4 concurrent folds (4×5=20 ≤ 24 cores)
+inference:
+  sw_batch_size: 1                                  # lower val peak (multiple trainings share a GPU)

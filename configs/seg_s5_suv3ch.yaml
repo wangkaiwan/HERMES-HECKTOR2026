@@ -1,0 +1,28 @@
+# S5 experiment — add a 3rd ABSOLUTE-SUV PET channel (CT, PET-percentile, PET-SUV).
+# Single fold-0 screen vs the deployed 2-channel STU-Net (same 5-fold split).
+# GO/NO-GO: clear borda margin (>0.01) → scale to 10-fold. Inherits the full
+# deployed STU-Net recipe; only adds the 3rd channel + a fresh cache_dir.
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+
+training:
+  run_name: s5_suv3ch                           # wandb → s5_suv3ch_fold0 (distinct)
+
+model:
+  in_channels: 3                                # CT + PET(percentile) + PET(abs-SUV)
+
+data:
+  aug_profile: nnunet                           # match continue-train's stronger aug (the
+                                                # whole point of continue-train was more aug)
+  pt_suv_channel: true                          # S5: emit the `pt_suv` 3rd channel
+  pt_suv_clip: [0.0, 25.0]                       # absolute SUV clip → [0,1] (avidity preserved)
+  pet_drop_prob: 0.1                            # aligned w/ continue-train; RandDropPETd now
+                                                # zeroes BOTH PET channels (1,2) together for 3-ch
+  num_workers: 8                                # back to 4 after cache-bloat fix (the earlier
+                                                # SIGKILL was bloat-driven, not worker count).
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_s5_suv3ch

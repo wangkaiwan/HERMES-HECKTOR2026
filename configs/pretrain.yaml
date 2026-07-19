@@ -1,0 +1,42 @@
+# Phase-0 pretraining config: self-supervised pretraining of VoCo-L SwinUNETR
+# on the HECKTOR 2026 PET/CT corpus (~1423 pairs).
+#
+# NOTE: HECKTOR 2025 is a strict subset of HECKTOR 2026 (the 2026 release
+# extends 2025 with ~270 new CHU Brest + ~96 public + ~150 UAE cases). Merging
+# would just duplicate samples, so we pretrain on the 2026 release alone.
+#
+# Strategy: VoCo-style volume contrast (Wu et al., CVPR 2024) on 96^3 patches,
+# starting from the official VoCo_L_SSL_head HuggingFace weights. We continue
+# the same pretext task on the in-domain HNC data so the encoder sees PET+CT
+# distributions before any fine-tuning on segmentation.
+
+defaults:
+  - default
+
+data:
+  # Manifest of all HECKTOR 2026 patients with both CT and PT (labels ignored
+  # — pretraining is self-supervised).
+  pretrain_manifest: data/manifests/pretrain_hecktor2026.csv
+  roi_size: [96, 96, 96]                            # match VoCo pretext
+  pet_drop_prob: 0.5                                # heavy modality masking encourages cross-modal features
+
+model:
+  variant: B
+  use_text_conditioning: false                      # text head not used during pretraining
+  pretrained_source: hf                             # warm-start from VoCo_B_SSL_head.pt on HuggingFace
+  hf_head: ssl
+
+training:
+  batch_size: 4                                     # smaller patches → bigger batch
+  max_epochs: 200
+  lr: 5.0e-4
+  warmup_epochs: 10
+  monitor_metric: val/voco_loss
+  save_dir: third_party/voco_pretrained/our_pretrained_B
+  ssl_method: voco                                  # voco | mae | simclr_3d
+
+  # VoCo-specific knobs
+  voco:
+    num_base_crops: 16                              # base partition crops
+    momentum: 0.99
+    queue_size: 16384

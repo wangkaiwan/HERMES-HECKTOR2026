@@ -1,0 +1,45 @@
+# STU-Net Small V4 (1×1×2mm + batch=4 + no early-stop) — task #18.
+#
+# Hypothesis: anisotropic spacing (1mm in-plane × 2mm Z) halves the volume
+# (192×192×320 → 192×192×160 voxels) so we can fit batch=4 on a single 5090.
+# Larger batch should give less-noisy gradient + better foreground/background
+# mix per step. Same model + same loss stack as bs1/bs2.
+#
+# Note on Z 2mm: HECKTOR source CT/PET often have native Z spacing of 2-4mm,
+# so 1×1×2mm is actually CLOSER to the native data resolution than our V3 1mm
+# (which upsampled Z by interpolation). Anatomical Z coverage in mm is identical
+# between 1mm and 1×1×2mm — only voxel density differs.
+#
+# Why no early stop: user decision (let it run, save_top_k=3 catches the best;
+# avoids stopping prematurely just before an LR-drop unlocks another level).
+#
+# Pretrained: still skipped (random init, matches bs1/bs2 for clean comparison).
+#
+# Launch (after cache build):
+#   bash scripts/shells/retrain_chain_stunet_v4.sh <gpu> 0
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet                       # inherit STU-Net Small + DS + plateau + warmup + focal + oversample
+
+data:
+  target_spacing: [1.0, 1.0, 2.0]            # ← V4 change: 1mm in-plane, 2mm Z
+  cache_volume: [192, 192, 160]              # ← Z 320mm @ 2mm = 160 voxels
+  roi_size: [192, 192, 160]                  # full canvas at new spacing (= cache_volume)
+  # ← V4 change: ABSOLUTE SUV clip (user request 2026-05-25). Removes the
+  # default per-patient `pt_clip_percentile` and uses fixed SUV range across
+  # all patients. Note: 2025 winner used per-image z-score (NOT absolute SUV);
+  # this is a user preference, not a winner-aligned choice.
+  pt_clip_range: [0.0, 25.0]                 # SUV 0-25 → [0, 1]; covers H&N tumor uptake without saturating
+  pt_clip_percentile: null                   # explicitly disable percentile path
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x160_1x1x2mm_absSUV   # distinct from percentile cache
+
+training:
+  batch_size: 4                              # ← V4 change: 4× the V3/STU-Net default
+  max_epochs: 500                            # ← V4 raised from 300 (LR=1e-4 + batch=4 → 1/4 step/epoch of bs1, needs more)
+  early_stop_patience: 9999                  # ← effectively disabled per user request
+  run_name: seg_retrain_stunet_v4            # distinct wandb run name

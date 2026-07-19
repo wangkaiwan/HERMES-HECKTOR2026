@@ -1,0 +1,63 @@
+# Task 2 (TN staging) + Task 3 (RFS Cox) — Route C training.
+#
+# Freeze the trained STU-Net backbone (encoder = full STU-Net SegmentationNetwork)
+# and train ONLY the tn_head + prog_head + clinical encoder on the bottleneck.
+# The locked seg pipeline (0.7228 borda) stays untouched.
+#
+# Plan (2026-05-31):
+#   - per-fold --init from each fold's locked top-1 ckpt (see retrain_chain_stunet_aug.sh)
+#   - freeze encoder (and its decoder path used for seg) — only heads trainable
+#   - seg loss WEIGHT 0 (no seg backprop); TN + Cox losses on
+#   - lr 5e-4 (higher than 1e-4 fresh, since heads are starting from scratch
+#     and the encoder is fixed)
+#   - max_epochs 80, EarlyStop on val/borda_score patience 20 (val-checks)
+#
+# Launch:
+#   bash scripts/shells/train_task23_chain.sh <gpu> <fold ...>
+#
+# Inherits from default + seg_only + seg_retrain + seg_retrain_v2 + seg_retrain_v3
+# + seg_retrain_stunet so the data pipeline is IDENTICAL to seg training.
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet              # inherit STU-Net + 1mm + PET-ROI + bs=1
+
+model:
+  # Override the seg_only-inherited use_text=false: keep false, no FiLM.
+  use_text_conditioning: false
+
+data:
+  aug_profile: default              # nnU-Net aug applies to seg; for head training
+                                    # we revert to the milder default profile (rot ±15°,
+                                    # scale [0.9,1.1]) so heads see smoother gradients
+
+training:
+  freeze_backbone: true             # ← new flag, see training/trainer.py
+  uncertainty_weighting: false
+  loss_weights:
+    seg: 0.0                        # ← NO seg loss
+    staging: 1.0
+    prognosis: 1.0
+  # Heads are only 220K params and the encoder is frozen → we have huge VRAM
+  # headroom. bs=4 cuts per-epoch iters 4× without hurting throughput (encoder
+  # forward batches cleanly on 5090). Cox loss fp16 fix already in trainer
+  # (autocast disabled for cox compute when bs≥2).
+  batch_size: 4
+  lr: 5.0e-4                        # heads from scratch, higher LR than fresh seg
+  lr_min: 1.0e-7
+  warmup_epochs: 3
+  max_epochs: 80
+  early_stop_patience: 20           # val-checks (= 20 epochs at val_every=1)
+  monitor_metric: val/score         # weighted composite (already wired)
+  # Validate every epoch (heads are fast; tighter signal for EarlyStop).
+  check_val_every_n_epoch: 1
+  scheduler: plateau                # ReduceLROnPlateau on val/score
+  scheduler_plateau:
+    factor: 0.5
+    patience: 4
+    min_lr: 1.0e-7
+  run_name: task23_frozen           # distinct wandb run

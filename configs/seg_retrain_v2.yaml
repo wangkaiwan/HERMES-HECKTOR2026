@@ -1,0 +1,38 @@
+# Phase-1 retrain v2 (#27) — supersedes #24 (seg_retrain.yaml).
+# Three changes vs #24:
+#   1. deep_supervision: aux 1×1×1 conv seg heads at decoder scales 1/2, 1/4, 1/8
+#      (skip 1/16: median GTVn is too small after 16× downsample).
+#      Loss = weighted Dice+CE+Focal at each scale, weights [1, 0.5, 0.25, 0.125]
+#      normalised to sum=1.
+#   2. LR scheduler cosine → ReduceLROnPlateau.  Diagnosis from #24: fixed cosine
+#      over 300 ep + EarlyStop(50 ep) left fold0/2/4 plateaued at LR still
+#      ~8-9e-5 → under-converged.  Plateau scheduler is per-fold adaptive.
+#   3. Decoder also has FiLM injection points wired in (DeepSupSwinUNETR), though
+#      use_text_conditioning=false here so they're dormant.  Phase 3 multitask
+#      gets it for free.
+#
+# Inherits seg_retrain.yaml (which itself inherits default + seg_only) — same
+# focal+oversampling+low-res-sim recipe, just with DS + plateau LR added.
+#
+# Launch (FRESH from VoCo, no warm-start):
+#   sudo bash scripts/shells/retrain_chain_v2.sh 0 0 2 4    # GPU0: folds 0,2,4
+#   sudo bash scripts/shells/retrain_chain_v2.sh 1 1 3      # GPU1: folds 1,3
+# Crash recovery: re-run; chain auto `--resume auto` if last.ckpt exists.
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain                                     # inherit #24's data + loss config (oversample, focal, lr, etc.)
+
+model:
+  deep_supervision: true                            # ← v2 change #1
+
+training:
+  scheduler: plateau                                # ← v2 change #2 (overrides default 'cosine')
+  scheduler_plateau:
+    factor: 0.5                                     # LR ×= 0.5 on plateau
+    patience: 5                                     # 5 val-checks = 10 epochs of no improvement
+    min_lr: 1.0e-7
+
+  # wandb run name → "seg_retrain_v2_fold{N}" (distinct from "seg_retrain_fold{N}" and old "seg_fold{N}").
+  run_name: seg_retrain_v2

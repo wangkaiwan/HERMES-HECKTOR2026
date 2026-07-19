@@ -1,0 +1,24 @@
+# S11: small patch (160³) + batch_size 4 + LR linearly scaled (1e-4 → 4e-4).
+# Explores the nnU-Net-style small-patch / large-batch regime, using GPU0's spare
+# headroom (S10 only uses ~5 GB). SEPARATE from S10/control, which stay batch 1 for the
+# clean patch-size-only comparison. Reuses the deployed 1 mm cache (roi is post-cache → no rebuild).
+# ReduceLROnPlateau will back off if 4e-4 is too hot.
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+training:
+  run_name: s11_smallpatch_bs4                     # → ckpt seg_fold0_s11_smallpatch_bs4, wandb s11_smallpatch_bs4_fold0
+  batch_size: 4                                    # ← vs batch 1 in S10/control
+  lr: 4.0e-4                                        # linear scale of 1e-4 × (4/1)
+data:
+  aug_profile: nnunet
+  roi_size: [160, 160, 160]                        # same small patch as S10
+  num_workers: 4                                    # lower: co-runs with S10(8)+control(8); 16+4=20 ≤ 24 cores
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm
+inference:
+  sw_batch_size: 1                                  # halve val peak (vs default 2) to avoid OOM when co-running
+                                                    # S10+S11 vals on one GPU. Results identical (batching only).

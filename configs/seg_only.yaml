@@ -1,0 +1,25 @@
+# Phase-1: train segmentation only (warmup the encoder + decoder before adding heads).
+# Inherits from default.yaml — overrides only.
+
+defaults:
+  - default
+
+training:
+  uncertainty_weighting: false
+  loss_weights:
+    seg: 1.0
+    staging: 0.0
+    prognosis: 0.0
+  # HECKTOR 2026 Task-1 official is Borda of (GTVp meanDSC, Borda(GTVn DSCagg, GTVn F1agg)).
+  # val/borda_score (trainer.py) = 0.5·GTVp_meandsc + 0.5·(0.5·DSCagg_GTVn + 0.5·F1agg) — the
+  # closest single-scalar proxy to the leaderboard ranking. Legacy val/dice_mean was
+  # DSCagg-only and ignored per-patient empty-prediction tails.
+  monitor_metric: val/borda_score
+  # Keep multiple recent candidates so the final ensemble pick can be re-scored
+  # post-hoc against the tightened F1agg (IoU > 0.30) once that lands.
+  save_top_k: 3
+  # NOTE: F1agg currently uses min_overlap_voxels=1 (any-voxel matching), not the
+  # official IoU > 0.30 — see training/metrics.py:AggregatedDetectionF1.
+
+model:
+  use_text_conditioning: false                      # turn on FiLM only after seg backbone is solid

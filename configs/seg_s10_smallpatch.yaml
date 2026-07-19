@@ -1,0 +1,18 @@
+# S10: smaller training patch (160,160,160) + full-volume val — tests whether a
+# smaller patch (more crop diversity, 2025-winner style) beats the full-box patch.
+# Identical to seg_ctrl_fullpatch EXCEPT roi_size. Reuses the deployed 1mm cache
+# (roi_size is a post-cache aug param → no cache rebuild).
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+training:
+  run_name: s10_smallpatch
+data:
+  aug_profile: nnunet
+  roi_size: [160, 160, 160]    # ← the only change vs control
+  num_workers: 8
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm

@@ -1,0 +1,42 @@
+# Phase-1 retrain v3 (#28) — adopts the HECKTOR 2025 seg winner's preprocessing
+# (1mm voxel + PET-intensity ROI crop, 192x192x320) on OUR VoCo SwinUNETR + deep
+# supervision + warmup + ReduceLROnPlateau (same model as v2).
+#
+# Changes vs v2 (data pipeline only — model/loss/scheduler all inherited from v2):
+#   - target_spacing 2mm → 1mm  (user empirically validated 1mm >> 2mm)
+#   - cache_volume / roi (160,160,192) → (192,192,320)  (/32-clean for SwinUNETR;
+#     winner's 200x200x310 is NOT /32-divisible)
+#   - roi_crop body → pet  (PETROICropd: superior-25% z-score>1 largest-CC centroid,
+#     validated to cover GT with 0 fullout — see evaluation/results/v3_roi_coverage.md)
+#   - NEW 1mm cache dir (do not collide with the 2mm cache)
+#   - KEEP our CT/PET normalization (NOT the winner's [-250,250]→[-6,6] / znorm)
+#
+# Launch (fresh from VoCo):
+#   bash scripts/shells/retrain_chain_v3.sh <gpu> <folds...>
+# Prereqs: build the 1mm cache first (scripts/prepare_cache.py-equivalent with this config).
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2          # inherit deep_supervision + scheduler:plateau (+ focal, oversample, warmup)
+
+data:
+  target_spacing: [1.0, 1.0, 1.0]
+  cache_volume: [192, 192, 320]
+  # PATCH training (NOT full canvas). At 1mm the full (192,192,320) needs 31GB train /
+  # 18.4GB infer (over both 5090 + T4). Measured 2026-05-22. NOTE the multitask model
+  # runs the swinViT trunk TWICE per forward (encoder() for seg + encode() for the
+  # TN/Cox bottleneck), so REAL training uses ~1.6× the bare-encoder probe → (192,192,192)
+  # actually OOM'd at ~31GB. (160,160,192) patch → ~22GB train / ~8GB infer = comfortable.
+  # Foreground-biased crop (RandCropByLabelClasses) keeps lesions; inference sliding-windows
+  # over the full (192,192,320) ROI. TODO(opt): dedupe the double trunk pass to allow 192³.
+  roi_size: [160, 160, 192]              # random patch from the (192,192,320) cache
+  roi_crop: pet                          # PETROICropd instead of body-crop + KeepTopZ
+  roi_z_top_fraction: 0.75               # winner's defaults
+  roi_z_score_threshold: 1.0
+  # 1mm cache is ~110 GB — separate dir, NVMe.
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm
+
+training:
+  run_name: seg_retrain_v3               # wandb distinct from v2 / retrain / original

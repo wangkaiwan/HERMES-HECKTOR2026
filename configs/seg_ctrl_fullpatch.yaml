@@ -1,0 +1,16 @@
+# CONTROL for the S10 small-patch test: from-scratch, 2ch-window, nnunet-aug,
+# FULL patch (192,192,320) — identical recipe to S10 except patch size, so the
+# S10-vs-this A/B isolates the patch-size effect (both 1-phase from-scratch).
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+training:
+  run_name: ctrl_fullpatch
+data:
+  aug_profile: nnunet          # match S5/S9/S10 (continue-train aug)
+  num_workers: 8
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm   # reuse deployed 1mm cache (same preprocessing)

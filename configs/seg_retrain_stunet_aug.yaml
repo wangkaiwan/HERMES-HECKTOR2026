@@ -1,0 +1,32 @@
+# nnU-Net aug A/B (task #18 follow-up, 2026-05-29). Continue-train each fold's
+# best ckpt with the 2025 winner's nnU-Net default DA bolted on:
+#   - widen rotation ±15° → ±30°
+#   - widen scale [0.9,1.1] → [0.75,1.25]
+#   - widen brightness-mult [0.9,1.1] → [0.75,1.25]
+#   - ADD gamma-invert (p=0.1)
+#   - ADD nnU-Net ContrastAugmentation (p=0.15)
+# Keep our extras: Elastic (p=0.3), PET-drop (p=0.1), lowres-sim (p=0.25).
+#
+# Fine-tune from peak (lr=1e-5, 10× lower than fresh) — `--init` resets
+# optimizer/scheduler so plateau scheduler walks from the new starting LR.
+# max_epochs=50 is a ceiling; early_stop_patience=25 likely fires earlier.
+#
+# Launch:
+#   bash scripts/shells/retrain_chain_stunet_aug.sh <gpu> <fold ...>
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet                       # inherit STU-Net + 1mm + PET-ROI + bs=1
+
+data:
+  aug_profile: nnunet                         # ← new gate (data/transforms.py)
+
+training:
+  lr: 1.0e-5                                  # ← fine-tune (10× lower than fresh)
+  warmup_epochs: 2                            # ← short, model already converged
+  max_epochs: 50                              # ← ceiling; expect early stop ~20-30 ep
+  run_name: seg_retrain_stunet_aug            # ← distinct wandb run

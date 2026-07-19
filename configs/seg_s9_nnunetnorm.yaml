@@ -1,0 +1,22 @@
+# S9 experiment — nnU-Net data-adaptive CT normalization (foreground 0.5/99.5
+# percentile clip + per-image z-score) instead of the fixed [-200,200] HU window.
+# Both 2025 seg winners use this scheme. Single fold-0 screen vs deployed.
+# GO/NO-GO: clear borda margin (>0.01) → adopt. Inherits deployed STU-Net recipe;
+# only swaps CT norm + a fresh cache_dir.
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet
+
+training:
+  run_name: s9_nnunetnorm                        # wandb → s9_nnunetnorm_fold0 (distinct)
+
+data:
+  aug_profile: nnunet                           # match continue-train's stronger aug (lr/epoch
+                                                # stay from-scratch; aug from continue-train)
+  ct_norm: nnunet                               # S9: percentile-clip + z-score CT
+  num_workers: 8                                # safe under concurrent cache builds (shm)
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_s9_nnunetnorm

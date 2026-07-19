@@ -1,0 +1,39 @@
+# STU-Net (Small) — pure-seg replacement for VoCo SwinUNETR (task #18).
+# Same data pipeline as V3 (1mm + PET-ROI + (192,192,320) cache, (160,160,192)
+# patch), same training stack (DS + warmup + ReduceLROnPlateau + focal +
+# oversampling + low-res-sim). Only the seg backbone changes.
+#
+# First version is PURE-SEG (use_text_conditioning false, staging/prognosis weights
+# = 0 — inherited from seg_only). Multitask STU-Net is a separate decision (Route C
+# in project_task23_arch_decision.md) once we know if V3/V4 beat STU-Net.
+#
+# Pretrained weights: STU-Net Small TotalSegmentator weights (1-channel CT) are
+# expected at third_party/stunet_pretrained/small_total_segmentator.pt; the
+# encoder auto-adapts the first-conv 1ch→2ch via tile/divide. If the file is
+# absent, training starts from random init (encoder will print a warning).
+#
+# Launch:
+#   bash scripts/shells/retrain_chain_stunet.sh <gpu> <fold ...>
+
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3                                  # inherit 1mm + PET-ROI + (192,192,320) + (160,160,192) patch
+
+model:
+  seg_backbone: stunet                              # switch backbone
+  variant: Small                                    # 2025 winner used Small × 10 ensemble
+  pretrained_weights: null                          # no pretrained for this round (user decision)
+  pretrained_source: local
+  # use_text_conditioning inherited as `false` from seg_only — STU-Net has no FiLM hook.
+
+data:
+  # STU-Net Small (14.55M params, 5× smaller than VoCo-B 73M) → can fit FULL-CANVAS
+  # training (192,192,320) on a single 5090. No more sliding-window mismatch
+  # between train and infer; matches the 2025 winner's setup.
+  roi_size: [192, 192, 320]                         # = data.cache_volume (full canvas, no random sub-crop)
+
+training:
+  run_name: seg_retrain_stunet                      # wandb distinct from all VoCo runs

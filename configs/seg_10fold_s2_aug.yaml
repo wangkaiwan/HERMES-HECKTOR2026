@@ -1,0 +1,26 @@
+# 10-fold STAGE-2 — nnU-Net-aug fine-tune, warm-started per-fold from each fold's
+# STAGE-1 best ckpt (checkpoints/seg_fold{N}/<best>.ckpt). Mirrors the PROVEN
+# 5-fold 2-stage recipe (configs/seg_retrain_stunet_aug.yaml): aug_profile=nnunet,
+# lr=1e-5, warmup=2, max_epochs=50 (early-stops ~ep15-30). Same 1mm cache, same
+# full patch. ckpt dir = seg_fold{N}_10fold_s2_aug, wandb = 10fold_s2_aug_fold{N},
+# log = logs/seg_10fold_s2_aug_fold{N}.log. Launch via scripts/_launch_10fold_s2_aug.sh.
+defaults:
+  - default
+  - seg_only
+  - seg_retrain
+  - seg_retrain_v2
+  - seg_retrain_v3
+  - seg_retrain_stunet                       # inherit STU-Net + 1mm + PET-ROI + bs=1
+training:
+  run_name: 10fold_s2_aug
+  save_top_k: 3                              # keep top-3 ckpts per fold (deployed ensemble mechanism)
+  lr: 1.0e-5                                 # fine-tune (10× lower than fresh)
+  warmup_epochs: 2                           # short — model already converged
+  max_epochs: 50                             # ceiling; expect early stop ~20-30 ep
+data:
+  aug_profile: nnunet                        # nnU-Net default DA (the stage-2 gate)
+  manifest_dir: data/manifests_10fold        # 10-fold split (5-fold manifests untouched)
+  cache_dir: /home/kaiwang/project/HECKTOR_2026_cache_192x320_1mm
+  num_workers: 5
+inference:
+  sw_batch_size: 1                           # lower val peak (multiple trainings share a GPU)

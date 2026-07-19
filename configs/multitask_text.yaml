@@ -1,0 +1,9 @@
+# Phase-2b: multitask + ClinicalBERT FiLM conditioning (proven +0.024 dice in HN_CU_Seg).
+
+defaults:
+  - default
+
+model:
+  use_text_conditioning: true
+  text_dim: 768
+  text_dropout_prob: 0.3
