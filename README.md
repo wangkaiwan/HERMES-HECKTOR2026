@@ -8,7 +8,7 @@ A single containerized algorithm for the three [HECKTOR 2026](https://hecktor26.
 2. **T/N staging** (radiological, AJCC/UICC 7th edition);
 3. **Recurrence-free survival (RFS)** prediction.
 
-Team **AMC_HNC**. This repository releases the code for our challenge submission; see `paper/HERMES_paper_V2.8.pdf` for the accompanying paper.
+Team **AMC_HNC**. This repository releases the code for our challenge submission; see `paper/HERMES_paper.pdf` for the accompanying paper.
 
 ---
 
@@ -17,7 +17,7 @@ Team **AMC_HNC**. This repository releases the code for our challenge submission
 A 10-fold **STU-Net Small** ensemble produces the segmentation; the predicted mask then drives two downstream tasks.
 
 - **Staging** fuses a 3-D deep patch model (`DualHeadFusionResNet`), a radiomics + clinical model, and — our main staging contribution — **geometry features derived from the predicted mask** (nodal component count, largest-node size/extent, total nodal burden, primary-tumor extent) that align with the size/number axes of 7th-edition N/T staging. Replacing radiomics with geometry raises N-stage balanced accuracy by +0.030 (out-of-fold).
-- **Survival** is an equal-weight ensemble of deep and clinical Cox experts, including one deep expert trained with a **concordance-tracking loss** (`training/losses.py:sigmoid_concordance_loss`) whose value approximates 1 − C-index during training.
+- **Survival** is an equal-weight ensemble of deep and clinical Cox experts, including one deep expert trained with a **concordance-tracking loss** (`training/losses.py:sigmoid_concordance_loss`) whose value approximates 1 − C-index during training. This loss is released as a standalone package at [**Meixu-Chen/sigmoid-concordance-loss**](https://github.com/Meixu-Chen/sigmoid-concordance-loss) (paper: [arXiv:2607.16802](https://arxiv.org/abs/2607.16802)).
 
 All components were selected on honest out-of-fold cross-validation under an anti-overfitting protocol (strong regularization, equal-weight fusion, no tuning on the public validation set).
 
@@ -77,6 +77,12 @@ ensemble → predicted-mask-driven staging and survival. Weights mount at `/opt/
 > [PLACEHOLDER — paper citation once available.] HERMES: A Hybrid Ensemble for
 > Head-and-Neck Tumor Segmentation, TN Staging, and Recurrence-Free Survival on
 > PET/CT. HECKTOR 2026 Challenge (MICCAI), team AMC_HNC.
+
+If you use the concordance-tracking survival loss, please also cite:
+
+> Chen, M., Wang, K., Wang, J.: Value-Monotonicity Matters: A Concordance Loss for
+> Deep Survival Prediction. arXiv:2607.16802 (2026).
+> Code: https://github.com/Meixu-Chen/sigmoid-concordance-loss
 
 
 ## Notes
