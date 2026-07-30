@@ -8,7 +8,7 @@ A single containerized algorithm for the three [HECKTOR 2026](https://hecktor26.
 2. **T/N staging** (radiological, AJCC/UICC 7th edition);
 3. **Recurrence-free survival (RFS)** prediction.
 
-Team **AMC_HNC**. This repository releases the code for our challenge submission; see `paper/HERMES_paper.pdf` for the accompanying paper.
+Team **AMC_HNC**. This repository releases the code for our challenge submission; see `paper/HERMES_paper.pdf` for the accompanying paper ([arXiv:2607.26498](https://arxiv.org/abs/2607.26498)).
 
 ---
 
@@ -74,9 +74,10 @@ ensemble → predicted-mask-driven staging and survival. Weights mount at `/opt/
 
 ## Citation
 
-> [PLACEHOLDER — paper citation once available.] HERMES: A Hybrid Ensemble for
-> Head-and-Neck Tumor Segmentation, TN Staging, and Recurrence-Free Survival on
-> PET/CT. HECKTOR 2026 Challenge (MICCAI), team AMC_HNC.
+> Wang, K., Chen, M., Nasr, E., Lanning, R., Miften, M.: HERMES: A Hybrid Ensemble
+> for Head-and-Neck Tumor Segmentation, TN Staging, and Recurrence-Free Survival on
+> PET/CT. arXiv:2607.26498 (2026). HECKTOR 2026 Challenge (MICCAI), team AMC_HNC.
+> https://arxiv.org/abs/2607.26498
 
 If you use the concordance-tracking survival loss, please also cite:
 
