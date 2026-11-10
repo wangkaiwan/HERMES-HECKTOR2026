@@ -59,6 +59,10 @@ ensemble → predicted-mask-driven staging and survival. Weights mount at `/opt/
 
 ## Reproduction
 
+- **Folds first.** The cross-validation manifests are not in git; `data/splits.py` rebuilds
+  them and is deterministic at `random_state=42`, so you get the same partition we used:
+  `--n_folds 10` for segmentation, `--n_folds 5` for staging and survival. Everything below
+  reads from `data/manifests/`, so run this before anything else.
 - **Segmentation:** train STU-Net folds from the `configs/*.yaml`; deploy the top-3
   checkpoints per fold with test-time augmentation.
 - **Task 2/3 deep experts:** `scripts/train_medai_hybrid.py`
